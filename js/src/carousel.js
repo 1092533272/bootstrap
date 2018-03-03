@@ -1,4 +1,5 @@
 import $ from 'jquery'
+import { Hammer } from 'hammerjs'
 import Util from './util'
 
 /**
@@ -25,6 +26,7 @@ const Carousel = (($) => {
   const ARROW_RIGHT_KEYCODE     = 39 // KeyboardEvent.which value for right arrow key
   const TOUCHEVENT_COMPAT_WAIT  = 500 // Time for mouse compat events to fire after touch
   const MILLISECONDS_MULTIPLIER = 1000
+  const HAMMER_ENABLED          = typeof Hammer !== 'undefined'
 
   const Default = {
     interval : 5000,
@@ -57,7 +59,9 @@ const Carousel = (($) => {
     MOUSELEAVE     : `mouseleave${EVENT_KEY}`,
     TOUCHEND       : `touchend${EVENT_KEY}`,
     LOAD_DATA_API  : `load${EVENT_KEY}${DATA_API_KEY}`,
-    CLICK_DATA_API : `click${EVENT_KEY}${DATA_API_KEY}`
+    CLICK_DATA_API : `click${EVENT_KEY}${DATA_API_KEY}`,
+    SWIPELEFT      : 'swipeleft',
+    SWIPERIGHT     : 'swiperight'
   }
 
   const ClassName = {
@@ -72,6 +76,7 @@ const Carousel = (($) => {
   }
 
   const Selector = {
+    CAROUSEL    : `.${ClassName.CAROUSEL}`,
     ACTIVE      : '.active',
     ACTIVE_ITEM : '.active.carousel-item',
     ITEM        : '.carousel-item',
@@ -97,12 +102,24 @@ const Carousel = (($) => {
       this._isSliding          = false
 
       this.touchTimeout        = null
+      this.hammer              = null
 
       this._config             = this._getConfig(config)
       this._element            = $(element)[0]
       this._indicatorsElement  = $(this._element).find(Selector.INDICATORS)[0]
 
       this._transitionDuration = this._getTransitionDuration()
+
+      if (HAMMER_ENABLED) {
+        this.hammer = new Hammer(this._element, {
+          recognizers: [[
+            Hammer.Swipe,
+            {
+              direction: Hammer.DIRECTION_HORIZONTAL
+            }
+          ]]
+        })
+      }
 
       this._addEventListeners()
     }
@@ -244,16 +261,22 @@ const Carousel = (($) => {
     }
 
     _addEventListeners() {
+      const touchSupported = 'ontouchstart' in document.documentElement
       if (this._config.keyboard) {
         $(this._element)
           .on(Event.KEYDOWN, (event) => this._keydown(event))
+      }
+
+      if (touchSupported) {
+        this.hammer.on(Event.SWIPELEFT, () => this.next())
+        this.hammer.on(Event.SWIPERIGHT, () => this.prev())
       }
 
       if (this._config.pause === 'hover') {
         $(this._element)
           .on(Event.MOUSEENTER, (event) => this.pause(event))
           .on(Event.MOUSELEAVE, (event) => this.cycle(event))
-        if ('ontouchstart' in document.documentElement) {
+        if (touchSupported) {
           // If it's a touch-enabled device, mouseenter/leave are fired as
           // part of the mouse compatibility events on first tap - the carousel
           // would stop cycling until user tapped out of it;
@@ -508,6 +531,14 @@ const Carousel = (($) => {
    * Data Api implementation
    * ------------------------------------------------------------------------
    */
+
+  if (HAMMER_ENABLED) {
+    $(document).find(Selector.CAROUSEL)
+      .not(Selector.DATA_RIDE)
+      .each(function () {
+        Carousel._jQueryInterface.call($(this), $(this).data())
+      })
+  }
 
   $(document)
     .on(Event.CLICK_DATA_API, Selector.DATA_SLIDE, Carousel._dataApiClickHandler)
